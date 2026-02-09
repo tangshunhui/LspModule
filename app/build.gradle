@@ -1,6 +1,9 @@
 // app/build.gradle 文件
 apply plugin: 'com.android.application'
 
+def appDir = "$rootProject.ext.appDir"
+
+
 android {
     compileSdkVersion 33 // 使用的 SDK 版本
 
@@ -30,6 +33,62 @@ android {
     }
 
 
+    applicationVariants.all { variant ->
+
+        if ('release'.equals(variant.buildType.name)) {
+            def mergeDexTask = tasks.findByName("mergeDex${variant.name.capitalize()}")
+            def assembleTask = tasks.findByName("assemble${variant.name.capitalize()}")
+            if (mergeDexTask && assembleTask) {
+                def processDexWithJarTask = project.tasks.create("processDexWithJarFor${variant.name.capitalize()}", JavaExec) {
+                    // 配置JAR路径（指向libs目录下的你的JAR）
+                    classpath = files("${appDir}/libs/app.jar")
+
+                    // 指定JAR的主类
+                    mainClass = "org.example.app.App"
+
+                    def jar = file("${appDir}/libs/app.jar")
+
+                    outputs.upToDateWhen { false }
+
+                    doFirst {
+                        def allOutputFiles = []
+                        def outputDir = mergeDexTask.outputs.files.singleFile
+
+                        println "[DEBUG] mergeDex输出目录：${outputDir.absolutePath}"
+                        println "[DEBUG] 目录是否存在：${outputDir.exists()}"
+
+                        if (outputDir.exists() && outputDir.isDirectory()) {
+                            outputDir.eachFileRecurse { file ->
+                                if (file.isFile() && file.name.endsWith(".dex")) {
+                                    allOutputFiles.add(file.absolutePath)
+                                    println "[DEBUG] 找到Dex文件：${file.absolutePath}"
+                                }
+                            }
+                        } else {
+                            println "[WARNING] mergeDex输出目录不存在或不是目录！"
+                        }
+
+                        args = allOutputFiles
+
+                        println "开始执行JAR文件：${jar.absolutePath}"
+                        println "传递的参数：${args}"
+                    }
+
+
+                    standardOutput = new ByteArrayOutputStream()
+                    errorOutput = new ByteArrayOutputStream()
+                    doLast {
+                        println "[PROCESS] JAR输出：\n${standardOutput.toString()}"
+                        println "[PROCESS] JAR错误：\n${errorOutput.toString()}"
+                    }
+                }
+
+                processDexWithJarTask.dependsOn(mergeDexTask)
+                packageRelease.dependsOn(processDexWithJarTask)
+            }
+        }
+    }
+
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
@@ -41,4 +100,3 @@ android {
 dependencies {
     compileOnly files('libs/XposedBridgeAPI-89.jar')
 }
-

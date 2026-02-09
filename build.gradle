@@ -15,3 +15,6 @@ allprojects {
     }
 }
 
+ext {
+    appDir = "${rootDir}/app"
+}

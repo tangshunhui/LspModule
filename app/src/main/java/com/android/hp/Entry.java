@@ -43,29 +43,16 @@ public class Entry {
             hookXposedDetecte(appContext, cl);
         } else if (pkgName.contains("com.finalwire.aida64")) {
             testAida64(cl);
-        } else if (pkgName.equals("com.rxznbbcc.aiqu")) {
-            testAnqu(cl);
         }
-
-
-
-
-
-
-
-
-        //File dir = appContext.getDir("cache", Context.MODE_PRIVATE);
-        //addDexPath(cl, "/data/local/tmp/lspd.dex", dir);
     }
 
     public static void testAida64(ClassLoader cl){     
         try {
             XposedBridge.log("hello xposed!");
 
-            XC_MethodHook.Unhook hookd = null;
-            XC_MethodHook cb = null;
+            XC_MethodHook.Unhook hookd = XposedHelpers.findAndHookMethod("com.finalwire.aida64.HHMainActivity", cl, "onCreate",
+                    android.os.Bundle.class, new XC_MethodHook() {
 
-            cb = new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     super.beforeHookedMethod(param);
@@ -76,10 +63,8 @@ public class Entry {
                     super.afterHookedMethod(param);
                     Log.d(TAG, "HHMainActivity onCreate afterHookedMethod");
                 }
-            };
 
-            hookd = XposedHelpers.findAndHookMethod("com.finalwire.aida64.HHMainActivity", cl, "onCreate",
-                    android.os.Bundle.class, cb);
+            });
 
             Log.d(TAG, "init done " + hookd);
         } catch (Exception e) {
@@ -87,24 +72,6 @@ public class Entry {
         }
         
     }
-
-    public static void addDexPath(ClassLoader cl, String dexPath, File dir) {
-        try {
-            Field pathListField = BaseDexClassLoader.class.getDeclaredField("pathList");
-            pathListField.setAccessible(true);
-            Object pathList = pathListField.get(cl);
-            if (pathList == null) {
-                Log.d(TAG, "addDexPath pathlist is null");
-                return;
-            }
-            Method addDexPath = pathList.getClass().getDeclaredMethod("addDexPath",new Class[]{String.class, File.class});
-            addDexPath.invoke(pathList, dexPath, dir);
-            Log.d(TAG, "addDexPath" + dexPath + " to " + cl);
-        } catch (Exception e){
-            Log.e(TAG, "addDexPath",  e);
-        }
-    }
-
 
     public static void hookXposedDetecte(Context appContext, ClassLoader classLoader) {
         try {
@@ -122,20 +89,6 @@ public class Entry {
         } catch (Exception e) {
             Log.w(TAG, "hook hookXposedDetecte failed", e);
         }
-    }
-
-    public static void testAnqu(ClassLoader classLoader) {
-        Log.i(TAG, "testAnqu");
-        XposedHelpers.findAndHookMethod("aiqu.g.k", classLoader, "n", java.lang.String.class, new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                Log.i(TAG, "doInBackground --> " + param.args[0]);
-            }
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                super.afterHookedMethod(param);
-            }
-        });
     }
 
     //private static native boolean initNative(int flags);
