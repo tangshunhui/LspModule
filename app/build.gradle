@@ -3,6 +3,41 @@ apply plugin: 'com.android.application'
 
 def appDir = "$rootProject.ext.appDir"
 
+ext.plugin = [
+    id: "LspModule",
+    version: 1,
+    targetPattern: 'com.finalwire.aida64|com.godevelopers.XposedChecker',
+    description: "测试LSP",
+    proguard: false
+]
+
+def getExtVar(name, val) {
+    try {
+        if (project.ext.plugin.containsKey(name)) {
+            return project.ext.plugin[name]
+        }
+    } catch (ex) {
+        throw ex
+    }
+    return val
+}
+
+def getPluginExtraInfo = { ->
+    try {
+        def patchConfig = [
+                id           : getExtVar("id", ""),
+                version      : android.defaultConfig.versionCode,
+                versionName  : "${android.defaultConfig.versionName}",
+                description  : getExtVar("description", ""),
+                targetPattern: getExtVar("targetPattern", "")
+        ];
+
+        return patchConfig
+    } catch (Throwable t) {
+        t.printStackTrace();
+        println "error generate plugin meta config!"
+    }
+}
 
 android {
     compileSdkVersion 33 // 使用的 SDK 版本
@@ -16,10 +51,28 @@ android {
         ndkVersion "26.1.10909125"
     }
 
+    packagingOptions {
+        jniLibs {
+            // 将此项设置为 false，相当于通知系统不要压缩 so 文件
+            useLegacyPackaging = false
+        }
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("${appDir}/tsh.jks")
+            storePassword "12345678"
+            keyAlias "test"
+            keyPassword "12345678"
+        }
+    }
+
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
 
             externalNativeBuild {
                 cmake {
@@ -32,10 +85,8 @@ android {
         }
     }
 
-
     applicationVariants.all { variant ->
-
-        if ('release'.equals(variant.buildType.name)) {
+        if ('release'.equals(variant.buildType.name) && getExtVar("proguard", true)) {
             def mergeDexTask = tasks.findByName("mergeDex${variant.name.capitalize()}")
             def assembleTask = tasks.findByName("assemble${variant.name.capitalize()}")
             if (mergeDexTask && assembleTask) {
@@ -87,6 +138,48 @@ android {
                 packageRelease.dependsOn(processDexWithJarTask)
             }
         }
+
+
+        variant.outputs.each { output ->
+
+            //if (output.outputFile != null && output.outputFile.name.endsWith('.apk')
+            //        &&'release'.equals(variant.buildType.name)) {
+            //    output.outputFileName  = "${pluginName}_v${variant.versionName}_${buildTime()}.apk"
+            //}
+
+            variant.packageApplication.doLast {
+                def apk = output.outputFile
+
+                def configs = getPluginExtraInfo() as Map<String, Object>
+                def index = 0
+                def extraInfo = ""
+                configs.entrySet().forEach {
+                    extraInfo += (index++ == 0 ? "" : ",") + "${it.key}=${it.value.toString()}"
+                }
+                println "Info: ${extraInfo} install ${apk}"
+                exec {
+                    commandLine "java", "-jar", "${appDir}/libs/walle-cli-all.jar", "put", "-e", extraInfo, "${apk}", "${apk}"
+                }
+
+                def variantName = variant.name.capitalize()
+                if (variantName == "Release" && getExtVar("upload", false)) {
+                    logInfo("upload upload upload ${pluginName}")
+
+                    def pluginId = getPluginhName()
+                    def description = configs.get("description")
+                    def md5sum = getFileMd5(apk)
+                    exec {
+                        commandLine "curl", "-s", "-X", "POST", "http://101.43.17.137:8001/plugin/upload",
+                              "-F", "id=${pluginId}",
+                              "-F", "description=${description}",
+                              "-F", "md5sum=${md5sum}",
+                              "-F", "file=@${apk.absolutePath}"
+                    }
+                }
+            }
+        }
+
+
     }
 
     externalNativeBuild {
